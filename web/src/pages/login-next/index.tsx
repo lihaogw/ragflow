@@ -7,10 +7,13 @@ import {
   useRegister,
 } from '@/hooks/use-login-request';
 import { useSystemConfig } from '@/hooks/use-system-request';
+import { LoginEmailSuffix, LoginPassword } from '@/constants/system-chat';
 import { rsaPsw } from '@/utils';
-import { useContext, useEffect, useState } from 'react';
+import { resolveLoginRedirect } from '@/utils/authorization-util';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
+import { appName } from '@/conf.json';
 
 import Spotlight from '@/components/spotlight';
 import { Button, ButtonLoading } from '@/components/ui/button';
@@ -269,11 +272,53 @@ const Login = () => {
     config?.registerEnabled === 1 || config?.registerEnabled === true;
 
   const { isLogin } = useAuth();
+  const loginParams = new URLSearchParams(location.search);
+  const hostLogin =
+    loginParams.has('userName') ||
+    (sessionStorage.getItem('hostLogin') === '1' &&
+      loginParams.has('redirect'));
+  const hostNickname = hostLogin
+    ? sessionStorage.getItem('emString') ||
+      localStorage.getItem('emString') ||
+      ''
+    : '';
+  const autoLoginStartedRef = useRef(false);
+  const [autoLoginFailed, setAutoLoginFailed] = useState(false);
+  const redirectTarget = resolveLoginRedirect();
+
   useEffect(() => {
     if (isLogin) {
-      navigate('/');
+      navigate(redirectTarget, { replace: true });
+      return;
     }
-  }, [isLogin, navigate]);
+
+    if (!hostNickname || autoLoginStartedRef.current) {
+      return;
+    }
+
+    autoLoginStartedRef.current = true;
+
+    const autoLogin = async () => {
+      try {
+        const code = await login({
+          email: `${hostNickname}${LoginEmailSuffix}`,
+          password: rsaPsw(LoginPassword) as string,
+        });
+
+        if (code === 0) {
+          sessionStorage.setItem('isLogin', '2');
+          navigate(redirectTarget, { replace: true });
+        } else {
+          setAutoLoginFailed(true);
+        }
+      } catch (error) {
+        console.error('Failed:', error);
+        setAutoLoginFailed(true);
+      }
+    };
+
+    autoLogin();
+  }, [hostNickname, isLogin, login, navigate, redirectTarget]);
 
   const handleLoginWithChannel = async (channel: string) => {
     await loginWithChannel(channel);
@@ -339,11 +384,11 @@ const Login = () => {
           password: rsaPassWord,
         });
         if (code === 0) {
-          navigate('/');
+          navigate(redirectTarget, { replace: true });
         }
       } else {
         const code = await register({
-          nickname: params.nickname,
+          nickname: params.nickname ?? '',
           email: params.email,
           password: rsaPassWord,
         });
@@ -352,9 +397,15 @@ const Login = () => {
         }
       }
     } catch (errorInfo) {
-      console.log('Failed:', errorInfo);
+      console.error('Failed:', errorInfo);
     }
   };
+
+  // A host-launched page logs in without showing the form; a standalone
+  // deployment, or a failed host auto-login, keeps the normal login UI.
+  if (isLogin || (hostNickname && !autoLoginFailed)) {
+    return <div className="size-full" />;
+  }
 
   return (
     <>
@@ -380,12 +431,12 @@ const Login = () => {
           <div className="flex items-center mb-4 w-full pl-10 pt-10 ">
             <div className="w-12 h-12 p-2 rounded-lg flex items-center justify-center mr-3">
               <img
-                src={'/logo.svg'}
+                src={'/logo.png'}
                 alt="logo"
                 className="size-8 mr-[12] cursor-pointer"
               />
             </div>
-            <div className="text-xl font-bold self-center">RAGFlow</div>
+            <div className="text-xl font-bold self-center">{appName}</div>
           </div>
           <h1 className="text-[36px] font-medium  text-center mb-2">
             {t('title')}

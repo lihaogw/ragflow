@@ -89,8 +89,57 @@ export const getAuthorization = () => {
 
 export default storage;
 
+const AppBase = (import.meta.env.VITE_BASE_URL || '/').replace(/\/+$/, '');
+
+const withAppBase = (path: string) => `${AppBase}${path}`;
+
+// Routes the host platform may ask the login page to return to. The `?chat`
+// form is the contract used by the host's entry links.
+const LoginRouteMap: Record<string, string> = {
+  chat: '/chat',
+  knowledge: '/datasets',
+  systemchat: '/systemchat',
+  serverconfig: '/serverconfig',
+  search: '/searches',
+};
+
+export function resolveLoginRedirect(search: string = location.search) {
+  // The host's mobile shell always resumes in the chat page.
+  if (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(max-width: 767px)').matches
+  ) {
+    return '/chat';
+  }
+
+  const params = new URLSearchParams(search);
+  const redirect = params.get('redirect');
+
+  if (redirect?.startsWith('/')) {
+    // `location.pathname` includes the deployment base; router paths do not.
+    return AppBase && redirect.startsWith(`${AppBase}/`)
+      ? redirect.slice(AppBase.length)
+      : redirect;
+  }
+
+  const matchedRoute = Object.keys(LoginRouteMap).find((key) =>
+    params.has(key),
+  );
+
+  return matchedRoute ? LoginRouteMap[matchedRoute] : '/chat';
+}
+
 // Will not jump to the login page
 export function redirectToLogin() {
-  // const env = import.meta.env;
-  window.location.href = location.origin + `/login`;
+  const loginUrl = withAppBase('/login');
+
+  if (location.pathname.startsWith(loginUrl)) {
+    window.location.href = location.origin + loginUrl;
+    return;
+  }
+
+  const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+
+  window.location.href =
+    location.origin + `${loginUrl}?redirect=${encodeURIComponent(currentUrl)}`;
 }

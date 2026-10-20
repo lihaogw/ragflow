@@ -641,9 +641,14 @@ export const useUpdateProviderInstance = () => {
   return { loading, updateProviderInstance: mutateAsync };
 };
 
-export const useFetchDefaultModels = () => {
-  const { data, isFetching: loading } = useQuery<IDefaultModel[]>({
+export const useFetchDefaultModels = (enabled = true) => {
+  const {
+    data,
+    isFetching: loading,
+    isError,
+  } = useQuery<IDefaultModel[]>({
     queryKey: LlmKeys.defaultModels(),
+    enabled,
     // Tenant default models change rarely, and every mutation that can change
     // them invalidates this key explicitly, so hold the result for a while
     // instead of refetching per observer — there is one per dataset row.
@@ -659,11 +664,24 @@ export const useFetchDefaultModels = () => {
     },
   });
 
-  return { data, loading };
+  return { data, loading, isError };
 };
 
-export const useFetchDefaultModelDictionary = (showEmptyModelWarn = false) => {
-  const { data: defaultModels, loading } = useFetchDefaultModels();
+export type DefaultModelDictionaryWithLoading = {
+  dictionary: Record<string, string>;
+  loading: boolean;
+  isError: boolean;
+};
+
+export const useFetchDefaultModelDictionaryWithLoading = (
+  showEmptyModelWarn = false,
+  enabled = true,
+): DefaultModelDictionaryWithLoading => {
+  const {
+    data: defaultModels,
+    loading,
+    isError,
+  } = useFetchDefaultModels(enabled);
 
   const result = useMemo(() => {
     const dict: Record<string, string> = {};
@@ -686,7 +704,14 @@ export const useFetchDefaultModelDictionary = (showEmptyModelWarn = false) => {
 
   useWarnEmptyModel(showEmptyModelWarn, result.embd_id, result.llm_id, loading);
 
-  return result;
+  return { dictionary: result, loading, isError };
+};
+
+export const useFetchDefaultModelDictionary = (showEmptyModelWarn = false) => {
+  const { dictionary } =
+    useFetchDefaultModelDictionaryWithLoading(showEmptyModelWarn);
+
+  return dictionary;
 };
 
 export const useSetDefaultModel = () => {

@@ -124,7 +124,8 @@ export default {
     },
     header: {
       knowledgeBase: 'Dataset',
-      chat: 'Chat',
+      chat: 'Knowledge Chat',
+      systemChat: 'System Chat',
       register: 'Register',
       signin: 'Sign in',
       home: 'Home',
@@ -140,6 +141,18 @@ export default {
       discord: 'Discord',
       github: 'GitHub',
       help: 'Help',
+    },
+    serverConfig: {
+      title: 'Server configuration',
+      description:
+        'Enter the server address; it is saved in the browser local storage.',
+      inputPlaceholder: 'Enter server address, e.g. http://localhost:8080',
+      reset: 'Reset to default',
+      resetSuccess: 'Reset to the default value',
+      quickAccess: 'Quick access',
+      insecureProtocol:
+        '(Insecure HTTP. Visit it once first before the page can use it.)',
+      emptyError: 'Server address cannot be empty',
     },
     skills: {
       title: 'Skills',
@@ -1077,6 +1090,14 @@ This auto-tagging feature enhances retrieval by adding another layer of domain-s
       chat: 'Chat',
       newChat: 'New chat',
       send: 'Send',
+      config: 'Configure',
+      holdToTalk: 'Hold to talk',
+      releaseToSend: 'Release to send',
+      textInput: 'Switch to text input',
+      voiceInput: 'Switch to voice input',
+      switchAssistant: 'Switch assistant',
+      loadFailed: 'Failed to load, please retry',
+      retry: 'Retry',
       sendPlaceholder: 'Message the assistant...',
       chatConfiguration: 'Chat configuration',
       chatConfigurationDescription:

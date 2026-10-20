@@ -16,16 +16,13 @@
 
 import message from '@/components/ui/message';
 import { Authorization } from '@/constants/authorization';
-import userService, {
-  getLoginChannels,
-  loginWithChannel,
-} from '@/services/user-service';
+import userService, { loginWithChannel } from '@/services/user-service';
 import {
   default as authorizationUtil,
   redirectToLogin,
   default as storage,
 } from '@/utils/authorization-util';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSaveSetting } from './use-user-setting-request';
 
@@ -45,15 +42,9 @@ export interface ILoginChannel {
 }
 
 export const useLoginChannels = () => {
-  const { data, isLoading } = useQuery({
-    queryKey: ['loginChannels'],
-    queryFn: async () => {
-      const { data: res = {} } = await getLoginChannels();
-      return res.data || [];
-    },
-  });
-
-  return { channels: data as ILoginChannel[], loading: isLoading };
+  // The host platform signs users in with the account it passes in the URL;
+  // third-party SSO channels stay disabled.
+  return { channels: [] as ILoginChannel[], loading: false };
 };
 
 export const useLoginWithChannel = () => {
@@ -84,6 +75,11 @@ export const useLogin = () => {
         // since the agent template resources are stored on the server.
         saveSetting({ language: storage.getLanguage() });
         const { data } = res;
+        // The platform display name is authoritative in the host UI.
+        const hostNickname = sessionStorage.getItem('emString');
+        if (hostNickname) {
+          data.nickname = hostNickname;
+        }
         const authorization = response.headers.get(Authorization);
         const token = data.access_token;
         const userInfo = {
@@ -149,6 +145,11 @@ export const useLogout = () => {
       if (data.code === 0) {
         message.success(t('message.logout'));
         authorizationUtil.removeAll();
+        // A later standalone visit to /login must show the form instead of
+        // reusing the host identity from this tab.
+        sessionStorage.removeItem('hostLogin');
+        sessionStorage.removeItem('emString');
+        localStorage.removeItem('emString');
         redirectToLogin();
       }
       return data.code;

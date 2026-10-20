@@ -989,45 +989,54 @@ export const useFetchKnowledgeList = (
   keywords = '',
   pageSize: number = KNOWLEDGE_LIST_PAGE_SIZE,
   canvasID?: string,
+  enabled = true,
 ): {
   list: IDataset[];
   loading: boolean;
+  isError: boolean;
   fetchNextPage: () => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
 } => {
-  const { data, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage } =
-    useInfiniteQuery<{ items: IDataset[]; total: number }>({
-      queryKey: KnowledgeListKeys.list(
-        shouldFilterListWithoutDocument,
-        keywords,
-        pageSize,
-        canvasID,
-      ),
-      gcTime: 0,
-      initialPageParam: 1,
-      queryFn: async ({ pageParam }) => {
-        const page = pageParam as number;
-        const { data } = await listDataset({
-          page,
-          page_size: pageSize,
-          ...(keywords ? { keywords } : {}),
-          ...(canvasID ? { canvas_id: canvasID } : {}),
-        });
-        return {
-          items: (data?.data ?? []) as IDataset[],
-          total: data?.total_datasets ?? 0,
-        };
-      },
-      getNextPageParam: (lastPage, allPages) => {
-        const loaded = allPages.reduce(
-          (total, page) => total + page.items.length,
-          0,
-        );
-        return loaded < lastPage.total ? allPages.length + 1 : undefined;
-      },
-    });
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    isError,
+  } = useInfiniteQuery<{ items: IDataset[]; total: number }>({
+    queryKey: KnowledgeListKeys.list(
+      shouldFilterListWithoutDocument,
+      keywords,
+      pageSize,
+      canvasID,
+    ),
+    gcTime: 0,
+    enabled,
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const page = pageParam as number;
+      const { data } = await listDataset({
+        page,
+        page_size: pageSize,
+        ...(keywords ? { keywords } : {}),
+        ...(canvasID ? { canvas_id: canvasID } : {}),
+      });
+      return {
+        items: (data?.data ?? []) as IDataset[],
+        total: data?.total_datasets ?? 0,
+      };
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce(
+        (total, page) => total + page.items.length,
+        0,
+      );
+      return loaded < lastPage.total ? allPages.length + 1 : undefined;
+    },
+  });
 
   const list = useMemo(() => {
     const all = data?.pages.flatMap((page) => page.items) ?? [];
@@ -1054,6 +1063,7 @@ export const useFetchKnowledgeList = (
   return {
     list,
     loading: isFetching,
+    isError,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,

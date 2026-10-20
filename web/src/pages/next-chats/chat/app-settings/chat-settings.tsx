@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { DatasetMetadata } from '@/constants/chat';
 import { useSetModalState } from '@/hooks/common-hooks';
 import { useFetchChat, useUpdateChat } from '@/hooks/use-chat-request';
+import { useFetchKnowledgeList } from '@/hooks/use-knowledge-request';
 import { useFindLlmByUuid } from '@/hooks/use-llm-request';
 import {
   useRevalidateStaleDatasetIds,
@@ -29,9 +30,16 @@ import { useChatSettingSchema } from './use-chat-setting-schema';
 import { useRevealSubmitErrors } from './use-reveal-submit-errors';
 import { getWebSearchProvider } from '../web-search-api-key';
 
-type ChatSettingsProps = { hasSingleChatBox: boolean };
+type ChatSettingsProps = {
+  hasSingleChatBox: boolean;
+  /** Render the form inline (mobile sheet) instead of the collapsible panel. */
+  alwaysVisible?: boolean;
+};
 
-export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
+export function ChatSettings({
+  hasSingleChatBox,
+  alwaysVisible = false,
+}: ChatSettingsProps) {
   const { data } = useFetchChat();
 
   const chatSettingSchema = useChatSettingSchema();
@@ -46,6 +54,14 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
 
   const { visible: settingVisible, switchVisible: switchSettingVisible } =
     useSetModalState(false);
+  const settingsOpen = alwaysVisible || settingVisible;
+  const { list: allDatasets, loading: datasetsLoading } = useFetchKnowledgeList(
+    false,
+    '',
+    1000,
+    undefined,
+    settingsOpen,
+  );
 
   const {
     formContainerRef,
@@ -150,48 +166,78 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
     }
   }, [data, form]);
 
+  // An assistant without any selected dataset starts from "all datasets
+  // selected". The effect runs after the reset effect above, so it is not
+  // overwritten by the server snapshot.
+  useEffect(() => {
+    if (!settingsOpen || datasetsLoading) {
+      return;
+    }
+    if (!isEmpty(data.dataset_ids) || allDatasets.length === 0) {
+      return;
+    }
+
+    const selected = form.getValues('dataset_ids');
+    if (Array.isArray(selected) && selected.length > 0) {
+      return;
+    }
+
+    form.setValue(
+      'dataset_ids',
+      allDatasets.map((dataset) => dataset.id),
+      { shouldDirty: false },
+    );
+  }, [allDatasets, data.dataset_ids, datasetsLoading, form, settingsOpen]);
+
   useRevalidateStaleDatasetIds(form, datasetsFetched);
 
   return (
     <>
-      {settingVisible || (
-        <div className="p-5">
-          <Button
-            onClick={switchSettingVisible}
-            disabled={!hasSingleChatBox}
-            variant={'ghost'}
-            size="icon-sm"
-            data-testid="chat-settings"
-          >
-            <LucideSettings />
-          </Button>
-        </div>
-      )}
+      {!alwaysVisible &&
+        (settingVisible || (
+          <div className="p-5">
+            <Button
+              onClick={switchSettingVisible}
+              disabled={!hasSingleChatBox}
+              variant={'ghost'}
+              size="icon-sm"
+              data-testid="chat-settings"
+            >
+              <LucideSettings />
+            </Button>
+          </div>
+        ))}
 
       <section
         data-testid="chat-detail-settings"
         className={cn(
           'transition-[width] ease-out duration-300 flex-shrink-0 flex flex-col overflow-hidden',
-          settingVisible ? 'w-[440px]' : 'w-0',
+          alwaysVisible
+            ? 'w-full h-full'
+            : settingVisible
+              ? 'w-[440px]'
+              : 'w-0',
         )}
       >
-        {settingVisible && (
+        {settingsOpen && (
           <>
             <div className="p-5 pb-2 flex justify-between items-center text-base">
               {t('chat.chatSetting')}
 
-              <Button
-                variant="transparent"
-                size="icon-sm"
-                className="border-0"
-                onClick={switchSettingVisible}
-                data-testid="chat-detail-settings-close"
-              >
-                <LucidePanelRightClose
-                  className="size-4 cursor-pointer"
+              {!alwaysVisible && (
+                <Button
+                  variant="transparent"
+                  size="icon-sm"
+                  className="border-0"
                   onClick={switchSettingVisible}
-                />
-              </Button>
+                  data-testid="chat-detail-settings-close"
+                >
+                  <LucidePanelRightClose
+                    className="size-4 cursor-pointer"
+                    onClick={switchSettingVisible}
+                  />
+                </Button>
+              )}
             </div>
 
             <Form {...form}>
@@ -214,13 +260,15 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
                 </ScrollArea>
 
                 <div className="p-5 pt-4 space-x-5 text-right">
-                  <Button
-                    variant={'outline'}
-                    onClick={switchSettingVisible}
-                    data-testid="chat-detail-settings-cancel"
-                  >
-                    {t('chat.cancel')}
-                  </Button>
+                  {!alwaysVisible && (
+                    <Button
+                      variant={'outline'}
+                      onClick={switchSettingVisible}
+                      data-testid="chat-detail-settings-cancel"
+                    >
+                      {t('chat.cancel')}
+                    </Button>
+                  )}
                   <SavingButton loading={loading}></SavingButton>
                 </div>
               </form>

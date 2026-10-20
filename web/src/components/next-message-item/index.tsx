@@ -201,7 +201,7 @@ function MessageItem({
           {visibleAvatar &&
             (item.role === MessageType.User ? (
               <RAGFlowAvatar
-                avatar={avatar ?? '/logo.svg'}
+                avatar={avatar ?? '/logo.png'}
                 name={nickname}
                 isPerson
               />

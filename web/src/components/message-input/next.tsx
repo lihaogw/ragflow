@@ -35,7 +35,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { CircleStop, Globe, Paperclip, Send, Upload, X } from 'lucide-react';
+import { useIsMobile } from '@/components/hooks/use-mobile';
+import {
+  CircleStop,
+  Globe,
+  Paperclip,
+  Send,
+  Settings2,
+  Upload,
+  X,
+} from 'lucide-react';
 import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +52,8 @@ import { toast } from 'sonner';
 import storage from '@/utils/authorization-util';
 import { SelectWithSearch } from '../originui/select-with-search';
 import { AudioButton } from '../ui/audio-button';
+
+const VoiceWaveHeights = [10, 30, 50, 30, 10];
 
 export type NextMessageInputOnPressEnterParameter = {
   enableThinking?: string;
@@ -65,14 +76,22 @@ interface NextMessageInputProps {
     enableThinking,
     enableInternet,
   }: NextMessageInputOnPressEnterParameter): void;
-  onInputChange: React.ChangeEventHandler<HTMLTextAreaElement>;
+  onInputChange: (
+    value: React.ChangeEvent<HTMLTextAreaElement> | string,
+  ) => void;
   createConversationBeforeUploadDocument?(message: string): Promise<any>;
   stopOutputMessage?(): void;
   onUpload?: NonNullable<FileUploadProps['onUpload']>;
   removeFile?(file: File): void;
+  allowUpload?: boolean;
   showReasoning?: boolean;
   showInternet?: boolean;
+  showAudio?: boolean;
   resize?: 'none' | 'vertical' | 'horizontal' | 'both';
+  /** Opt into the host's mobile voice UI (hold to talk + text/voice toggle). */
+  enableHostVoice?: boolean;
+  /** Mobile-only entry point for session and assistant configuration. */
+  onConfigClick?: () => void;
 }
 
 export function NextMessageInput({
@@ -88,10 +107,19 @@ export function NextMessageInput({
   stopOutputMessage,
   onPressEnter,
   removeFile,
+  allowUpload = true,
   showReasoning = false,
   showInternet = false,
+  showAudio = true,
+  enableHostVoice = false,
+  onConfigClick,
 }: NextMessageInputProps) {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
+  const useHostMobileUi = isMobile && enableHostVoice;
+  const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
+  const [isHoldingVoice, setIsHoldingVoice] = useState(false);
+  const [pendingSend, setPendingSend] = useState(false);
   const [files, setFiles] = React.useState<File[]>([]);
   const [audioInputValue, setAudioInputValue] = React.useState<string | null>(
     null,
@@ -106,6 +134,12 @@ export function NextMessageInput({
   const [isManualMode, setIsManualMode] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const dragStartRef = useRef({ startY: 0, startHeight: 0 });
+  const inputChangeRef = useRef(onInputChange);
+  const holdingVoiceRef = useRef(false);
+
+  useEffect(() => {
+    inputChangeRef.current = onInputChange;
+  }, [onInputChange]);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -180,6 +214,58 @@ export function NextMessageInput({
     });
   }, [onPressEnter, enableThinking, enableInternet, showInternet]);
 
+  const handleVoiceStart = useCallback(() => {
+    if (holdingVoiceRef.current) {
+      return;
+    }
+    holdingVoiceRef.current = true;
+    window.parent.postMessage({ StartVoice: 'StartVoice' }, '*');
+    setIsHoldingVoice(true);
+  }, []);
+
+  const handleVoiceEnd = useCallback(() => {
+    if (!holdingVoiceRef.current) {
+      return;
+    }
+    holdingVoiceRef.current = false;
+    window.parent.postMessage({ StopVoice: 'StopVoice' }, '*');
+    setIsHoldingVoice(false);
+  }, []);
+
+  const toggleInputMode = useCallback(() => {
+    setInputMode((previous) => (previous === 'text' ? 'voice' : 'text'));
+  }, []);
+
+  // The host returns a transcript through the bootstrap script.
+  useEffect(() => {
+    if (!enableHostVoice) {
+      return;
+    }
+
+    const callback = (text: string) => {
+      if (!text) {
+        return;
+      }
+      inputChangeRef.current(text);
+      setPendingSend(true);
+    };
+
+    window.callbackVoiceXFData = callback;
+
+    return () => {
+      if (window.callbackVoiceXFData === callback) {
+        delete window.callbackVoiceXFData;
+      }
+    };
+  }, [enableHostVoice]);
+
+  useEffect(() => {
+    if (pendingSend && value) {
+      pressEnter();
+      setPendingSend(false);
+    }
+  }, [pendingSend, pressEnter, value]);
+
   useEffect(() => {
     if (audioInputValue !== null) {
       onInputChange({
@@ -247,22 +333,24 @@ export function NextMessageInput({
       className="relative w-full items-center"
       disabled={isUploading || disabled}
     >
-      <FileUploadDropzone
-        tabIndex={-1}
-        // Prevents the dropzone from triggering on click
-        onClick={(event) => event.preventDefault()}
-        className="absolute top-0 left-0 z-0 flex size-full items-center justify-center rounded-none border-none bg-background/50 p-0 opacity-0 backdrop-blur transition-opacity duration-200 ease-out data-[dragging]:z-10 data-[dragging]:opacity-100"
-      >
-        <div className="flex flex-col items-center gap-1 text-center">
-          <div className="flex items-center justify-center rounded-full border p-2.5">
-            <Upload className="size-6 text-muted-foreground" />
+      {allowUpload && (
+        <FileUploadDropzone
+          tabIndex={-1}
+          // Prevents the dropzone from triggering on click
+          onClick={(event) => event.preventDefault()}
+          className="absolute top-0 left-0 z-0 flex size-full items-center justify-center rounded-none border-none bg-background/50 p-0 opacity-0 backdrop-blur transition-opacity duration-200 ease-out data-[dragging]:z-10 data-[dragging]:opacity-100"
+        >
+          <div className="flex flex-col items-center gap-1 text-center">
+            <div className="flex items-center justify-center rounded-full border p-2.5">
+              <Upload className="size-6 text-muted-foreground" />
+            </div>
+            <p className="font-medium text-sm">Drag & drop files here</p>
+            <p className="text-muted-foreground text-xs">
+              Upload max 5 files each up to 5MB
+            </p>
           </div>
-          <p className="font-medium text-sm">Drag & drop files here</p>
-          <p className="text-muted-foreground text-xs">
-            Upload max 5 files each up to 5MB
-          </p>
-        </div>
-      </FileUploadDropzone>
+        </FileUploadDropzone>
+      )}
 
       <form
         onSubmit={onSubmit}
@@ -282,48 +370,101 @@ export function NextMessageInput({
             <span className="h-0.5 w-full rounded-full bg-border-button" />
           </button>
         )}
-        <FileUploadList
-          orientation="horizontal"
-          className="overflow-x-auto px-0 py-1"
-        >
-          {files.map((file, index) => (
-            <FileUploadItem key={index} value={file} className="max-w-52 p-1.5">
-              <FileUploadItemPreview className="size-8 [&>svg]:size-5">
-                <FileUploadItemProgress variant="fill" />
-              </FileUploadItemPreview>
-              <FileUploadItemMetadata size="sm" />
-              <FileUploadItemDelete asChild>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="-top-1 -right-1 absolute size-4 shrink-0 cursor-pointer rounded-full"
-                  onClick={handleRemoveFile(file)}
+        {allowUpload && (
+          <FileUploadList
+            orientation="horizontal"
+            className="overflow-x-auto px-0 py-1"
+          >
+            {files.map((file, index) => (
+              <FileUploadItem
+                key={index}
+                value={file}
+                className="max-w-52 p-1.5"
+              >
+                <FileUploadItemPreview className="size-8 [&>svg]:size-5">
+                  <FileUploadItemProgress variant="fill" />
+                </FileUploadItemPreview>
+                <FileUploadItemMetadata size="sm" />
+                <FileUploadItemDelete asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="-top-1 -right-1 absolute size-4 shrink-0 cursor-pointer rounded-full"
+                    onClick={handleRemoveFile(file)}
+                  >
+                    <X className="size-2.5" />
+                  </Button>
+                </FileUploadItemDelete>
+              </FileUploadItem>
+            ))}
+          </FileUploadList>
+        )}
+        {useHostMobileUi && inputMode === 'voice' ? (
+          <div className="flex min-h-10 items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleInputMode}
+              aria-label={t('chat.textInput')}
+              className="shrink-0"
+            >
+              <img src="/gw-icon-typing.png" alt="" className="size-8" />
+            </button>
+
+            <div className="flex flex-1 flex-col gap-1">
+              {isHoldingVoice && (
+                <div
+                  className="flex h-8 items-center justify-center gap-1"
+                  aria-hidden
                 >
-                  <X className="size-2.5" />
-                </Button>
-              </FileUploadItemDelete>
-            </FileUploadItem>
-          ))}
-        </FileUploadList>
-        <Textarea
-          ref={textareaRef}
-          data-testid="chat-textarea"
-          value={value}
-          onChange={onInputChange}
-          placeholder={t('chat.messagePlaceholder')}
-          className="
-            min-h-10 max-h-[400px] w-full p-0 overflow-auto
-            !outline-none !border-transparent !bg-transparent !shadow-none !ring-transparent !ring-offset-transparent
-          "
-          disabled={isUploading || disabled || sendLoading}
-          onKeyDown={handleKeyDown}
-          resize={resize === 'vertical' ? 'none' : resize}
-          autoSize={isManualMode ? undefined : { minRows: 2, maxRows: 8 }}
-        />
+                  {VoiceWaveHeights.map((height, index) => (
+                    <span
+                      key={`${height}-${index}`}
+                      className="ragflow-voice-wave-bar w-[3px] bg-state-success"
+                      style={{
+                        height,
+                        animationDelay: `${index * 0.1}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full select-none touch-none"
+                onPointerDown={handleVoiceStart}
+                onPointerUp={handleVoiceEnd}
+                onPointerCancel={handleVoiceEnd}
+                onPointerLeave={isHoldingVoice ? handleVoiceEnd : undefined}
+              >
+                {isHoldingVoice
+                  ? t('chat.releaseToSend')
+                  : t('chat.holdToTalk')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Textarea
+            ref={textareaRef}
+            data-testid="chat-textarea"
+            value={value}
+            onChange={onInputChange}
+            placeholder={t('chat.messagePlaceholder')}
+            className="
+              min-h-10 max-h-[400px] w-full p-0 overflow-auto
+              !outline-none !border-transparent !bg-transparent !shadow-none !ring-transparent !ring-offset-transparent
+            "
+            disabled={isUploading || disabled || sendLoading}
+            onKeyDown={handleKeyDown}
+            resize={resize === 'vertical' ? 'none' : resize}
+            autoSize={isManualMode ? undefined : { minRows: 2, maxRows: 8 }}
+          />
+        )}
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            {showUploadIcon && (
+            {allowUpload && showUploadIcon && !useHostMobileUi && (
               <FileUploadTrigger asChild>
                 <Button
                   type="button"
@@ -337,6 +478,32 @@ export function NextMessageInput({
                   <span className="sr-only">Attach file</span>
                 </Button>
               </FileUploadTrigger>
+            )}
+
+            {useHostMobileUi && inputMode === 'text' && (
+              <Button
+                type="button"
+                variant="transparent"
+                size="icon-xs"
+                className="border-0"
+                onClick={toggleInputMode}
+                aria-label={t('chat.voiceInput')}
+              >
+                <img src="/gw-icon-voice.png" alt="" className="size-5" />
+              </Button>
+            )}
+
+            {isMobile && onConfigClick && (
+              <Button
+                type="button"
+                variant="transparent"
+                size="icon-xs"
+                className="gap-1 border-0"
+                onClick={onConfigClick}
+              >
+                <Settings2 className="size-3.5" />
+                <span>{t('chat.config')}</span>
+              </Button>
             )}
 
             {showReasoning && (
@@ -381,12 +548,14 @@ export function NextMessageInput({
             </Button>
           ) : (
             <div className="flex items-center gap-3">
-              <AudioButton
-                onOk={(value) => {
-                  setAudioInputValue(value);
-                }}
-                testId="chat-detail-audio-toggle"
-              />
+              {showAudio && !useHostMobileUi && (
+                <AudioButton
+                  onOk={(value) => {
+                    setAudioInputValue(value);
+                  }}
+                  testId="chat-detail-audio-toggle"
+                />
+              )}
 
               <Button
                 size="icon-xs"

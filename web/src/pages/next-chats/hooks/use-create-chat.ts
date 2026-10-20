@@ -52,7 +52,7 @@ export const useCreateChatDialog = () => {
   const onCreateChatOk = useCallback(
     async (name: string) => {
       const ret = await createChat({ ...InitialData, name });
-      if (ret === 0) {
+      if (ret?.code === 0) {
         hideCreateChatModal();
       }
     },

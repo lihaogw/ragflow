@@ -31,7 +31,7 @@ import {
 import { IKnowledgeFile } from '@/interfaces/database/dataset';
 import { changeLanguageAsync } from '@/locales/config';
 import api from '@/utils/api';
-import { getAuthorization } from '@/utils/authorization-util';
+import storage, { getAuthorization } from '@/utils/authorization-util';
 import { buildMessageUuid, mergeAnswerChunk } from '@/utils/chat';
 import {
   consumeListDeletionMarker,
@@ -40,14 +40,7 @@ import {
 import axios from 'axios';
 import { EventSourceParserStream } from 'eventsource-parser/stream';
 import { has, isEmpty, omit } from 'lodash';
-import {
-  ChangeEventHandler,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslate } from './common-hooks';
 import { useSetPaginationParams } from './route-hook';
 import { useSaveSetting } from './use-user-setting-request';
@@ -75,8 +68,12 @@ export const useChangeLanguage = () => {
 
   const changeLanguage = useCallback(
     (lng: string) => {
-      changeLanguageAsync(lng);
-      saveSetting({ language: lng });
+      // The host platform owns the UI language: it writes `lng` into local
+      // storage from the URL before the app boots, and every later switch must
+      // keep using that value.
+      const nextLng = storage.getLanguage() || lng;
+      changeLanguageAsync(nextLng);
+      saveSetting({ language: nextLng });
     },
     [saveSetting],
   );
@@ -568,8 +565,12 @@ export const useScrollToBottom = (
 export const useHandleMessageInputChange = () => {
   const [value, setValue] = useState('');
 
-  const handleInputChange: ChangeEventHandler<HTMLTextAreaElement> = (e) => {
-    const value = e.target.value;
+  // The host bridge delivers transcribed speech as a plain string, while the
+  // textarea delivers a change event; both funnel into the same state.
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement> | string,
+  ) => {
+    const value = typeof e === 'string' ? e : e.target.value;
     const nextValue = value.replaceAll('\\n', '\n').replaceAll('\\t', '\t');
     setValue(nextValue);
   };

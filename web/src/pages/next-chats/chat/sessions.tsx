@@ -1,35 +1,26 @@
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
-import EmbedDialog from '@/components/embed-dialog';
-import { useShowEmbedModal } from '@/components/embed-dialog/use-show-embed-dialog';
 import { MoreButton } from '@/components/more-button';
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SearchInput } from '@/components/ui/input';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { SharedFrom } from '@/constants/chat';
 import { useSetModalState } from '@/hooks/common-hooks';
 import {
   useFetchChat,
   useGetChatSearchParams,
   useRemoveSessions,
 } from '@/hooks/use-chat-request';
+import { cn } from '@/lib/utils';
 import {
   LucideCopyX,
   LucideListChecks,
   LucidePanelLeftClose,
   LucidePlus,
-  LucideSend,
   LucideTrash2,
   LucideUndo2,
 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
 import { useChatStreamStore } from '../chat-stream/store';
 import { useChatUrlParams } from '../hooks/use-chat-url';
 import { useHandleClickConversationCard } from '../hooks/use-click-card';
@@ -39,8 +30,19 @@ import { ConversationDropdown } from './conversation-dropdown';
 type SessionProps = Pick<
   ReturnType<typeof useHandleClickConversationCard>,
   'handleConversationCardClick'
->;
-export function Sessions({ handleConversationCardClick }: SessionProps) {
+> & {
+  className?: string;
+  /** The mobile sheet owns visibility, so the collapse toggle is hidden. */
+  hideToggle?: boolean;
+  onConversationSelected?: () => void;
+};
+
+export function Sessions({
+  handleConversationCardClick,
+  className,
+  hideToggle = false,
+  onConversationSelected,
+}: SessionProps) {
   const { t } = useTranslation();
   const {
     list: conversationList,
@@ -167,11 +169,20 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
 
   const selectedCount = visibleSelectedIds.length;
 
-  const { id } = useParams();
-  const { showEmbedModal, hideEmbedModal, embedVisible, beta } =
-    useShowEmbedModal();
+  const handleAddConversation = useCallback(() => {
+    addTemporaryConversation();
+    onConversationSelected?.();
+  }, [addTemporaryConversation, onConversationSelected]);
 
-  if (!visible) {
+  const handleSelectConversation = useCallback(
+    (id: string, isNew: boolean) => () => {
+      handleConversationCardClick(id, isNew);
+      onConversationSelected?.();
+    },
+    [handleConversationCardClick, onConversationSelected],
+  );
+
+  if (!visible && !hideToggle) {
     return (
       <div className="p-5">
         <Button
@@ -193,7 +204,11 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
 
   return (
     <aside
-      className="p-5 w-[296px] flex flex-col"
+      className={cn(
+        'p-5 flex flex-col',
+        hideToggle ? 'w-full' : 'w-[296px]',
+        className,
+      )}
       role="complementary"
       data-testid="chat-detail-sessions"
     >
@@ -208,37 +223,17 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
           <span className="flex-1 truncate">{data.name}</span>
         </div>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={showEmbedModal}
-              size="icon-xs"
-              data-testid="chat-detail-embed-open"
-            >
-              <LucideSend />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('common.embedIntoSite')}</TooltipContent>
-        </Tooltip>
-
-        <EmbedDialog
-          visible={embedVisible}
-          hideModal={hideEmbedModal}
-          token={id!}
-          from={SharedFrom.Chat}
-          beta={beta}
-          isAgent={false}
-        />
-
-        <Button
-          variant="transparent"
-          size="icon-sm"
-          className="border-0 ml-auto"
-          onClick={switchVisible}
-          data-testid="chat-detail-sessions-close"
-        >
-          <LucidePanelLeftClose />
-        </Button>
+        {!hideToggle && (
+          <Button
+            variant="transparent"
+            size="icon-sm"
+            className="border-0 ml-auto"
+            onClick={switchVisible}
+            data-testid="chat-detail-sessions-close"
+          >
+            <LucidePanelLeftClose />
+          </Button>
+        )}
       </header>
 
       <div className="flex justify-between items-center mb-4 pt-10">
@@ -268,7 +263,7 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={addTemporaryConversation}
+              onClick={handleAddConversation}
               data-testid="chat-detail-session-new"
             >
               <LucidePlus className="h-4 w-4" />
@@ -361,7 +356,7 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
                   <button
                     type="button"
                     className="focus-visible:outline-none px-3 py-2 text-left flex-1 truncate"
-                    onClick={() => handleConversationCardClick(x.id, x.is_new)}
+                    onClick={handleSelectConversation(x.id, x.is_new)}
                     data-testid="chat-detail-session-item"
                     data-session-id={x.id}
                   >

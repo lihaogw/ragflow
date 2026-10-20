@@ -99,8 +99,8 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	// Use userService.LoginByEmail with adminLogin=true
-	// This allows default admin account to log in admin system
+	// LoginByEmail only authenticates existing users, so a mistyped admin
+	// email cannot create an account. The superuser check happens below.
 	user, code, err := h.userService.LoginByEmail(ctx, &req)
 	if err != nil {
 		common.ErrorWithCode(c, code, err.Error())

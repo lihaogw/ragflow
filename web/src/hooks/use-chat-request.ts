@@ -190,7 +190,7 @@ export const useCreateChat = () => {
         });
         message.success(t('message.created'));
       }
-      return data?.code;
+      return data;
     },
   });
 

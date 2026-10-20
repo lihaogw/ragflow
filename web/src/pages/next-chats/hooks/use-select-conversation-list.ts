@@ -3,6 +3,7 @@ import { useTranslate } from '@/hooks/common-hooks';
 import {
   useFetchChatList,
   useFetchSessionList,
+  useGetChatSearchParams,
 } from '@/hooks/use-chat-request';
 import { IConversation } from '@/interfaces/database/chat';
 import { generateConversationId } from '@/utils/chat';
@@ -34,8 +35,27 @@ export const useSelectDerivedConversationList = () => {
   } = useFetchSessionList();
 
   const { id: dialogId } = useParams();
+  const { conversationId: currentConversationId, isNew } =
+    useGetChatSearchParams();
   const prologue = useFindPrologueFromDialogList();
   const { setConversationBoth } = useChatUrlParams();
+
+  const buildTemporaryConversation = useCallback(
+    (conversationId: string): IConversation =>
+      ({
+        id: conversationId,
+        name: t('newConversation'),
+        chat_id: dialogId,
+        is_new: true,
+        messages: [
+          {
+            content: prologue,
+            role: MessageType.Assistant,
+          },
+        ],
+      }) as any,
+    [dialogId, prologue, t],
+  );
 
   const addTemporaryConversation = useCallback(() => {
     const conversationId = generateConversationId();
@@ -45,31 +65,18 @@ export const useSelectDerivedConversationList = () => {
     setList((pre) => {
       if (dialogId) {
         setConversationBoth(conversationId, 'true');
-        const nextList = [
-          {
-            id: conversationId,
-            name: t('newConversation'),
-            chat_id: dialogId,
-            is_new: true,
-            messages: [
-              {
-                content: prologue,
-                role: MessageType.Assistant,
-              },
-            ],
-          } as any,
+        return [
+          buildTemporaryConversation(conversationId),
           ...conversationList,
         ];
-        return nextList;
       }
 
       return pre;
     });
   }, [
+    buildTemporaryConversation,
     dialogId,
     setConversationBoth,
-    t,
-    prologue,
     conversationList,
     setSearchString,
   ]);
@@ -98,6 +105,27 @@ export const useSelectDerivedConversationList = () => {
   useEffect(() => {
     setList([...conversationList]);
   }, [conversationList]);
+
+  // The chat page can open a temporary conversation directly from the URL
+  // (e.g. the host entry auto-selects one). Keep that conversation visible in
+  // every consumer of this list, not only in the instance that created it.
+  useEffect(() => {
+    if (isNew !== 'true' || !currentConversationId || !dialogId) {
+      return;
+    }
+
+    setList((previous) =>
+      previous.some((x) => x.id === currentConversationId)
+        ? previous
+        : [buildTemporaryConversation(currentConversationId), ...previous],
+    );
+  }, [
+    buildTemporaryConversation,
+    conversationList,
+    currentConversationId,
+    dialogId,
+    isNew,
+  ]);
 
   return {
     list,

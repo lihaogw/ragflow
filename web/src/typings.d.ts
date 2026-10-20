@@ -19,6 +19,13 @@ declare module 'lodash';
 
 declare global {
   type Nullable<T> = T | null;
+
+  interface Window {
+    callbackVoiceXFData?: (text: string) => void;
+    onSunClick?: () => void;
+    onMoonClick?: () => void;
+    changeLanguage?: (lng: string) => void;
+  }
 }
 
 declare module '@tanstack/react-table' {

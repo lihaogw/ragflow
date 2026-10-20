@@ -81,6 +81,7 @@ type LoginRequest struct {
 type EmailLoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+	Nickname string `json:"nickname"`
 }
 
 // UpdateSettingsRequest update user settings request
@@ -134,10 +135,19 @@ func (s *UserService) Register(ctx context.Context, req *RegisterRequest) (*enti
 		return nil, common.CodeExceptionError, err
 	}
 
-	var hashedPassword string
-	hashedPassword, err = common.GenerateWerkzeugPasswordHash(decryptedPassword)
+	user, err := s.createAccount(ctx, req.Email, req.Nickname, decryptedPassword)
 	if err != nil {
-		return nil, common.CodeServerError, fmt.Errorf("failed to hash password: %w", err)
+		return nil, common.CodeServerError, err
+	}
+	return user, common.CodeSuccess, nil
+}
+
+// createAccount creates a user together with its tenant, owner membership and
+// root folder in one transaction.
+func (s *UserService) createAccount(ctx context.Context, email, nickname, plainPassword string) (*entity.User, error) {
+	hashedPassword, err := common.GenerateWerkzeugPasswordHash(plainPassword)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
 	userID := common.GenerateToken()
@@ -153,8 +163,8 @@ func (s *UserService) Register(ctx context.Context, req *RegisterRequest) (*enti
 	user := &entity.User{
 		ID:              userID,
 		AccessToken:     &accessToken,
-		Email:           req.Email,
-		Nickname:        req.Nickname,
+		Email:           email,
+		Nickname:        nickname,
 		Password:        &hashedPassword,
 		Status:          &status,
 		Language:        &language,
@@ -168,36 +178,16 @@ func (s *UserService) Register(ctx context.Context, req *RegisterRequest) (*enti
 		IsSuperuser:     &isSuperuser,
 	}
 
-	tenantName := req.Nickname + "'s Kingdom"
+	tenantName := nickname + "'s Kingdom"
 
+	cfg := server.GetConfig()
 	llmID := cfg.GetDefaultChatModel().Name
-	if llmID == "" {
-		llmID = ""
-	}
 	embdID := cfg.GetDefaultEmbeddingModel().Name
-	if embdID == "" {
-		embdID = ""
-	}
 	asrID := cfg.GetDefaultASRModel().Name
-	if asrID == "" {
-		asrID = ""
-	}
 	img2txtID := cfg.GetDefaultVisionModel().Name
-	if img2txtID == "" {
-		img2txtID = ""
-	}
 	rerankID := cfg.GetDefaultRerankModel().Name
-	if rerankID == "" {
-		rerankID = ""
-	}
 	ttsID := cfg.GetDefaultTTSModel().Name
-	if ttsID == "" {
-		ttsID = ""
-	}
 	ocrID := cfg.GetDefaultOCRModel().Name
-	if ocrID == "" {
-		ocrID = ""
-	}
 
 	tenant := &entity.Tenant{
 		ID:        userID,
@@ -222,7 +212,7 @@ func (s *UserService) Register(ctx context.Context, req *RegisterRequest) (*enti
 		Status:    &status,
 	}
 	fileID := common.GenerateToken()
-	file__ := ""
+	fileLocation := ""
 	rootFile := &entity.File{
 		ID:        fileID,
 		ParentID:  fileID,
@@ -230,7 +220,7 @@ func (s *UserService) Register(ctx context.Context, req *RegisterRequest) (*enti
 		CreatedBy: userID,
 		Name:      "/",
 		Type:      "folder",
-		Location:  &file__,
+		Location:  &fileLocation,
 		Size:      0,
 	}
 
@@ -253,9 +243,9 @@ func (s *UserService) Register(ctx context.Context, req *RegisterRequest) (*enti
 		}
 		return nil
 	}); err != nil {
-		return nil, common.CodeServerError, fmt.Errorf("fail to create transaction: %w", err)
+		return nil, fmt.Errorf("fail to create transaction: %w", err)
 	}
-	return user, common.CodeSuccess, nil
+	return user, nil
 }
 
 // Login user login
@@ -293,7 +283,8 @@ func (s *UserService) Login(ctx context.Context, req *LoginRequest) (*entity.Use
 	return user, common.CodeSuccess, nil
 }
 
-// LoginByEmail user login by email
+// LoginByEmail authenticates an existing user by email. Unknown emails are
+// rejected; the public login endpoint uses LoginOrRegisterByEmail instead.
 // Returns user on success, or error with specific code:
 // - CodeAuthenticationError (109): Email not registered or password mismatch
 // - CodeServerError (500): Password decryption failure
@@ -304,8 +295,52 @@ func (s *UserService) LoginByEmail(ctx context.Context, req *EmailLoginRequest) 
 		common.Error("user not found by email", err)
 		return nil, common.CodeAuthenticationError, fmt.Errorf("email: %s is not registered", req.Email)
 	}
+	return s.loginUser(ctx, user, req.Password)
+}
+
+// LoginOrRegisterByEmail logs a user in, registering the account first when
+// the email is not registered yet. The registration switch does not gate this
+// path: the login endpoint remains open to first-time users.
+// The bool result reports whether a new account was created.
+func (s *UserService) LoginOrRegisterByEmail(ctx context.Context, req *EmailLoginRequest) (*entity.User, bool, common.ErrorCode, error) {
+	user, err := s.userDAO.GetByEmail(ctx, dao.DB, req.Email)
+	if err == nil {
+		user, code, err := s.loginUser(ctx, user, req.Password)
+		return user, false, code, err
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, false, common.CodeServerError, fmt.Errorf("failed to look up user: %w", err)
+	}
 
 	decryptedPassword, err := common.DecryptPassword(req.Password)
+	if err != nil {
+		return nil, false, common.CodeServerError, fmt.Errorf("fail to crypt password")
+	}
+
+	nickname := req.Nickname
+	if nickname == "" {
+		nickname = req.Email
+	}
+	user, err = s.createAccount(ctx, req.Email, nickname, decryptedPassword)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		// A concurrent first login created the account; the unique index on
+		// user.email kept it single, so authenticate against that account.
+		existing, lookupErr := s.userDAO.GetByEmail(ctx, dao.DB, req.Email)
+		if lookupErr != nil {
+			return nil, false, common.CodeServerError, fmt.Errorf("fail to register %s: %w", req.Email, err)
+		}
+		user, code, loginErr := s.loginUser(ctx, existing, req.Password)
+		return user, false, code, loginErr
+	}
+	if err != nil {
+		return nil, false, common.CodeServerError, fmt.Errorf("fail to register %s: %w", req.Email, err)
+	}
+	return user, true, common.CodeSuccess, nil
+}
+
+// loginUser verifies the password and rotates the access token.
+func (s *UserService) loginUser(ctx context.Context, user *entity.User, encryptedPassword string) (*entity.User, common.ErrorCode, error) {
+	decryptedPassword, err := common.DecryptPassword(encryptedPassword)
 	if err != nil {
 		return nil, common.CodeServerError, fmt.Errorf("fail to crypt password")
 	}

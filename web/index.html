@@ -2,13 +2,139 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RAGFlow</title>
+    <title>敢为文档</title>
     <script src="/iconfont.js" defer></script>
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+
+      @media screen and (max-width: 767px) {
+        .ragflow-home-loading {
+          background: #121622 !important;
+        }
+
+        .ragflow-home-loading::after {
+          content: '';
+          display: block;
+          width: 50px;
+          height: 50px;
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background-image: url('./logo.png');
+          background-repeat: no-repeat;
+          background-size: 100% 100%;
+        }
+      }
+    </style>
+    <script>
+      const getParameterMap = () => {
+        return new URLSearchParams(window.location.search);
+      };
+
+      const userName = getParameterMap().get('userName');
+
+      // Only host-launched pages carry `userName`. In that mode the host
+      // restores the session itself, so persisted RAGFlow credentials must be
+      // cleared on every full page load. A standalone deployment keeps its
+      // normal login session.
+      if (userName) {
+        localStorage.Authorization = '';
+        localStorage.Token = '';
+        sessionStorage.isLogin = '';
+        sessionStorage.x_id_1 = '';
+        sessionStorage.x_id_2 = '';
+        sessionStorage.hostLogin = '1';
+      }
+
+      if (!localStorage.serverConfig) {
+        localStorage.serverConfig = '%VITE_SYSTEM_SERVER_URL%';
+      }
+
+      const normalizeLanguage = (value) => {
+        const lower = value.toLowerCase();
+        if (
+          lower === 'zh' ||
+          lower === 'zh-cn' ||
+          lower === 'zh-sg' ||
+          lower === 'zh-hans'
+        ) {
+          return 'zh-Hans';
+        }
+        if (
+          lower === 'zh-tw' ||
+          lower === 'zh-hk' ||
+          lower === 'zh-mo' ||
+          lower === 'zh-hant'
+        ) {
+          return 'zh-Hant';
+        }
+        if (lower === 'pt' || lower === 'pt-br') {
+          return 'pt-BR';
+        }
+        return value.includes('-') ? value.split('-')[0] : value;
+      };
+
+      const languageType = getParameterMap().get('languageType');
+      if (languageType) {
+        localStorage.lng = normalizeLanguage(languageType);
+      } else if (localStorage.lng) {
+        // Migrate values written by older builds (e.g. `zh`).
+        localStorage.lng = normalizeLanguage(localStorage.lng);
+      }
+
+      const theme = getParameterMap().get('theme');
+      if (theme) {
+        localStorage.setItem('ragflow-ui-theme', theme);
+      }
+
+      if (userName) {
+        localStorage.emString = userName;
+        sessionStorage.emString = userName;
+      }
+
+      const hostOrigin = '%VITE_HOST_ORIGIN%';
+
+      window.addEventListener('message', function (event) {
+        // Only the embedding host may drive voice and theme. Set
+        // VITE_HOST_ORIGIN to additionally pin the exact origin.
+        if (event.source !== window.parent) return;
+        if (hostOrigin && event.origin !== hostOrigin) return;
+
+        const data = event?.data;
+        if (!data || data === '' || data === 'undefined') return;
+
+        // Voice start/stop notifications travel child -> host.
+        if (data.StartVoice || data.StopVoice) return;
+
+        if (data.voice) {
+          window.callbackVoiceXFData && window.callbackVoiceXFData(data.voice);
+        }
+
+        if (data.theme) {
+          localStorage.setItem('ragflow-ui-theme', data.theme);
+          sessionStorage.setItem('ragflow-ui-theme', data.theme);
+          data.theme === 'dark'
+            ? window.onSunClick && window.onSunClick()
+            : window.onMoonClick && window.onMoonClick();
+        }
+      });
+    </script>
   </head>
-  <body>
+  <body class="ragflow-home-loading">
     <div id="root"></div>
+    <script>
+      if (window.matchMedia('(max-width: 767px)').matches) {
+        setTimeout(() => {
+          document.body.className = '';
+        }, 2000);
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

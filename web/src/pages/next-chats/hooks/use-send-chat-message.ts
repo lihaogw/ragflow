@@ -51,8 +51,11 @@ export const useCurrentChatSession = () => {
   }, [conversationId, dialogId, ensureSession]);
 
   useEffect(() => {
-    if (!conversationId || isNew !== 'true') return;
-    seedPrologue(conversationId, dialogId ?? '', prologue ?? '');
+    // Wait for the assistant list to supply the opener: seeding an empty
+    // message would win the store's idempotency check and the real opener
+    // could never replace it.
+    if (!conversationId || isNew !== 'true' || !prologue) return;
+    seedPrologue(conversationId, dialogId ?? '', prologue);
   }, [conversationId, dialogId, isNew, prologue, seedPrologue]);
 
   return {

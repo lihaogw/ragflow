@@ -101,6 +101,7 @@ const MessageItem = ({
         className={classNames(styles.messageItemSection, {
           [styles.messageItemSectionLeft]: item.role === MessageType.Assistant,
           [styles.messageItemSectionRight]: item.role === MessageType.User,
+          'max-md:!w-full': item.role === MessageType.Assistant,
         })}
       >
         <div
@@ -112,7 +113,7 @@ const MessageItem = ({
             (item.role === MessageType.User ? (
               <RAGFlowAvatar
                 className="size-10"
-                avatar={avatar ?? '/logo.svg'}
+                avatar={avatar ?? '/logo.png'}
                 isPerson
                 name={nickname}
               />

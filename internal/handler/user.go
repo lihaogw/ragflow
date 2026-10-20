@@ -201,7 +201,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 // LoginByEmail user login by email
 // @Summary User Login by Email
-// @Description User login verification using email
+// @Description User login verification using email; an unregistered email is registered and logged in
 // @Tags users
 // @Param request body service.EmailLoginRequest true "login info with email"
 // @Success 200 {object} map[string]interface{}
@@ -245,7 +245,7 @@ func (h *UserHandler) LoginByEmail(c *gin.Context) {
 		return
 	}
 
-	user, code, err := h.userService.LoginByEmail(ctx, &req)
+	user, created, code, err := h.userService.LoginOrRegisterByEmail(ctx, &req)
 	if err != nil {
 		common.ResponseWithCodeData(c, code, false, err.Error())
 		operationLog.ErrorCode = uint16(code)
@@ -279,8 +279,12 @@ func (h *UserHandler) LoginByEmail(c *gin.Context) {
 	c.Header("Access-Control-Allow-Headers", "*")
 	c.Header("Access-Control-Expose-Headers", "Authorization")
 
+	message := "Welcome back!"
+	if created {
+		message = fmt.Sprintf("%s, welcome aboard!", user.Nickname)
+	}
 	profile := h.userService.GetUserProfile(ctx, user)
-	common.SuccessWithData(c, profile, "Welcome back!")
+	common.SuccessWithData(c, profile, message)
 }
 
 // GetUserByID get user by ID

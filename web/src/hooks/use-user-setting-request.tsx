@@ -34,6 +34,7 @@ import userService, {
   listTenant,
   listTenantUser,
 } from '@/services/user-service';
+import storage from '@/utils/authorization-util';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -72,7 +73,9 @@ export const useFetchUserInfo = (): ResponseGetType<IUserInfo> => {
             ?.code ?? DEFAULT_LANGUAGE_CODE;
 
         return Object.assign({}, data.data, {
-          language: targetLng,
+          // The host platform's language, written to client storage before
+          // boot, wins over the language persisted on the server.
+          language: storage.getLanguage() || targetLng,
         });
       }
 

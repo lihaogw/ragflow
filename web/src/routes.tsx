@@ -50,6 +50,8 @@ export enum Routes {
   SearchShare = '/search/share',
   Chats = '/chats',
   Chat = '/chat',
+  SystemChat = '/systemchat',
+  ServerConfig = '/serverconfig',
 
   Skills = '/files/skills',
   ProfileSetting = '/profile-setting',
@@ -187,6 +189,11 @@ const routeConfigOptions = [
     ],
   },
   {
+    path: Routes.Chat,
+    layout: false,
+    Component: () => import('@/pages/next-chats/chat-entry'),
+  },
+  {
     path: Routes.Chat + '/:id',
     Component: () => import('@/pages/next-chats/chat'),
   },
@@ -227,6 +234,14 @@ const routeConfigOptions = [
       {
         path: Routes.Chats,
         Component: () => import('@/pages/next-chats'),
+      },
+      {
+        path: Routes.SystemChat,
+        Component: () => import('@/pages/systemchat'),
+      },
+      {
+        path: Routes.ServerConfig,
+        Component: () => import('@/pages/server-config'),
       },
       {
         path: Routes.Searches,
@@ -282,32 +297,9 @@ const routeConfigOptions = [
             element: <Navigate to={`/user-setting/model`} replace />,
           },
           {
-            path: `${Routes.UserSetting}/profile`,
-            Component: () => import('@/pages/user-setting/profile'),
-          },
-          /*
-          {
-            path: `${Routes.UserSetting}/locale`,
-            Component: () => import('@/pages/user-setting/setting-locale'),
-          },
-          */
-          {
             path: `${Routes.UserSetting}/model`,
             Component: () => import('@/pages/user-setting/setting-model'),
           },
-          {
-            path: `${Routes.UserSetting}/team`,
-            Component: () => import('@/pages/user-setting/setting-team'),
-          },
-          {
-            path: `${Routes.UserSetting}${Routes.Api}`,
-            Component: () => import('@/pages/user-setting/setting-api'),
-          },
-          {
-            path: `${Routes.UserSetting}${Routes.Mcp}`,
-            Component: () => import('@/pages/user-setting/mcp'),
-          },
-
           {
             path: `${Routes.UserSetting}${Routes.DataSource}`,
             Component: () => import('@/pages/user-setting/data-source'),

@@ -31,6 +31,7 @@ import weekYear from 'dayjs/plugin/weekYear';
 import weekday from 'dayjs/plugin/weekday';
 import React from 'react';
 import { RouterProvider } from 'react-router';
+import { HostBridge } from './components/host-bridge';
 import { ThemeProvider } from './components/theme-provider';
 import { TooltipProvider } from './components/ui/tooltip';
 import { ThemeEnum } from './constants/common';
@@ -81,6 +82,7 @@ const queryClient = new QueryClient({
 function Root({ children }: React.PropsWithChildren) {
   return (
     <>
+      <HostBridge />
       {children}
 
       <Sonner position="top-right" expand richColors closeButton />

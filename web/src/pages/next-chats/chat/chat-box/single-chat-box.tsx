@@ -20,9 +20,10 @@ import { useShowInternet } from '../use-show-internet';
 
 interface IProps {
   conversation: IClientConversation;
+  onConfigClick?: () => void;
 }
 
-export function SingleChatBox({ conversation }: IProps) {
+export function SingleChatBox({ conversation, onConfigClick }: IProps) {
   const {
     value,
     scrollRef,
@@ -131,6 +132,8 @@ export function SingleChatBox({ conversation }: IProps) {
           removeFile={removeFile}
           showReasoning
           showInternet={showInternet}
+          enableHostVoice
+          onConfigClick={onConfigClick}
         />
         {visible && (
           <PdfSheet
