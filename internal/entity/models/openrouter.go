@@ -183,7 +183,7 @@ func (o *OpenRouterModel) Embed(ctx context.Context, modelName *string, request 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiConfig.ApiKey))
+	o.baseModel.applyAuth(req, apiConfig)
 
 	resp, err := o.baseModel.httpClient.Do(req)
 	if err != nil {
@@ -291,7 +291,7 @@ func (o *OpenRouterModel) Rerank(ctx context.Context, modelName *string, request
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiConfig.ApiKey))
+	o.baseModel.applyAuth(req, apiConfig)
 
 	resp, err := o.baseModel.httpClient.Do(req)
 	if err != nil {
@@ -406,7 +406,7 @@ func (o *OpenRouterModel) TranscribeAudio(ctx context.Context, modelName *string
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiConfig.ApiKey))
+	o.baseModel.applyAuth(req, apiConfig)
 
 	resp, err := o.baseModel.httpClient.Do(req)
 	if err != nil {
@@ -478,7 +478,7 @@ func (o *OpenRouterModel) AudioSpeech(ctx context.Context, modelName *string, au
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiConfig.ApiKey))
+	o.baseModel.applyAuth(req, apiConfig)
 
 	resp, err := o.baseModel.httpClient.Do(req)
 	if err != nil {
@@ -539,7 +539,7 @@ func (o *OpenRouterModel) ListModels(ctx context.Context, apiConfig *APIConfig) 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiConfig.ApiKey))
+	o.baseModel.applyAuth(req, apiConfig)
 
 	resp, err := o.baseModel.httpClient.Do(req)
 	if err != nil {
@@ -588,7 +588,7 @@ func (o *OpenRouterModel) Balance(ctx context.Context, apiConfig *APIConfig) (ma
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *apiConfig.ApiKey))
+	o.baseModel.applyAuth(req, apiConfig)
 
 	resp, err := o.baseModel.httpClient.Do(req)
 	if err != nil {

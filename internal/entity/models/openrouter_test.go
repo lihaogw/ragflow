@@ -67,6 +67,36 @@ func writeOpenRouterAudioFile(t *testing.T, name string, content []byte) string 
 	return path
 }
 
+// TestOpenRouterEmbedTrimsAPIKeyWhitespace pins that a pasted key with leading
+// whitespace still authenticates. OpenRouter answers "Missing Authentication
+// header" when the Authorization header is "Bearer" followed by an empty token,
+// which is exactly what a raw "Bearer %s" with a leading-space key produces; the
+// shared BearerAuth helper trims the key before formatting the header.
+func TestOpenRouterEmbedTrimsAPIKeyWhitespace(t *testing.T) {
+	withSSRFBypass(t)
+	ctx := t.Context()
+	srv := newOpenRouterServer(t, "/embeddings", func(t *testing.T, r *http.Request, body map[string]interface{}, w http.ResponseWriter) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]interface{}{{"embedding": []float64{0.1, 0.2}, "index": 0}},
+		})
+	})
+	defer srv.Close()
+
+	apiKey := "  test-key"
+	modelName := "qwen/qwen3-embedding-0.6b"
+	driver := NewOpenRouterModel(
+		map[string]string{"default": srv.URL},
+		URLSuffix{Embedding: "embeddings"},
+	)
+	embeds, err := driver.Embed(ctx, &modelName, EmbedRequest{Texts: []string{"hello"}}, &APIConfig{ApiKey: &apiKey}, nil, nil)
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if len(embeds) != 1 {
+		t.Fatalf("embeddings=%d, want 1", len(embeds))
+	}
+}
+
 func TestOpenRouterAudioFormatUsesConfiguredValue(t *testing.T) {
 	if got := openRouterAudioFormat("sample.wav", &ASRConfig{Params: map[string]interface{}{"format": ".mp3"}}); got != "mp3" {
 		t.Errorf("format=%q, want mp3", got)
