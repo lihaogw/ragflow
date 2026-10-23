@@ -22,9 +22,6 @@ on:
       - 'docs/**'
       - '*.md'
       - '*.mdx'
-  schedule:
-    - cron: '0 16 * * *'  # This schedule runs every 16:00:00Z(00:00:00+08:00)
-
 # https://docs.github.com/en/actions/using-jobs/using-concurrency
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'ci' && format('-ignore-{0}', github.run_id) || '' }}
@@ -70,7 +67,7 @@ jobs:
       - name: Check workflow duplication
         if: ${{ !cancelled() && !failure() }}
         run: |
-          if [[ ${GITHUB_EVENT_NAME} != "pull_request" && ${GITHUB_EVENT_NAME} != "pull_request_target" && ${GITHUB_EVENT_NAME} != "schedule" ]]; then
+          if [[ ${GITHUB_EVENT_NAME} != "pull_request" && ${GITHUB_EVENT_NAME} != "pull_request_target" ]]; then
             HEAD=$(git rev-parse HEAD)
             # Find a PR that introduced a given commit
             gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
@@ -153,50 +150,44 @@ jobs:
           has_web=false
           has_native_deepdoc=false
 
-          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" || "${GITHUB_EVENT_NAME}" == "pull_request_target" ]]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }})
+          else
+            BASE_SHA="${{ github.event.before }}"
+            if [[ -n "${BASE_SHA}" && ! "${BASE_SHA}" =~ ^0+$ ]]; then
+              CHANGED_FILES=$(git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}")
+            else
+              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+            fi
+          fi
+
+          while IFS= read -r file; do
+            case "$file" in
+              # Docker, test, SDK, and workflow changes can alter either server path.
+              # build.sh also controls the C++/native build, so it must trigger native backend.
+              Dockerfile|Dockerfile_ci|docker/**|.github/workflows/**|sdk/**|build.sh)
+                has_go=true
+                has_native_deepdoc=true
+                ;;
+              test/**)
+                has_go=true
+                ;;
+              # DeepDoc native backend (Go inference layer, C++ static lib, pinned testdata).
+              # Must come BEFORE the generic "*.go"/"*.py" rules, otherwise deepdoc/*.go
+              # would be caught by "*.go" first and never set has_native_deepdoc.
+              internal/deepdoc/**|internal/binding/cpp/**|internal/deepdoc/native/testdata.ref)
+                has_go=true
+                has_native_deepdoc=true
+                ;;
+              *.go|go.mod|go.sum)                       has_go=true ;;
+              web/*)                                    has_web=true ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          if [[ "$has_go" == "false" && "$has_web" == "false" ]]; then
             has_go=true
             has_web=true
             has_native_deepdoc=true
-          else
-            if [[ "${GITHUB_EVENT_NAME}" == "pull_request" || "${GITHUB_EVENT_NAME}" == "pull_request_target" ]]; then
-              CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }})
-            else
-              BASE_SHA="${{ github.event.before }}"
-              if [[ -n "${BASE_SHA}" && ! "${BASE_SHA}" =~ ^0+$ ]]; then
-                CHANGED_FILES=$(git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}")
-              else
-                CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-              fi
-            fi
-
-            while IFS= read -r file; do
-              case "$file" in
-                # Docker, test, SDK, and workflow changes can alter either server path.
-                # build.sh also controls the C++/native build, so it must trigger native backend.
-                Dockerfile|Dockerfile_ci|docker/**|.github/workflows/**|sdk/**|build.sh)
-                  has_go=true
-                  has_native_deepdoc=true
-                  ;;
-                test/**)
-                  has_go=true
-                  ;;
-                # DeepDoc native backend (Go inference layer, C++ static lib, pinned testdata).
-                # Must come BEFORE the generic "*.go"/"*.py" rules, otherwise deepdoc/*.go
-                # would be caught by "*.go" first and never set has_native_deepdoc.
-                internal/deepdoc/**|internal/binding/cpp/**|internal/deepdoc/native/testdata.ref)
-                  has_go=true
-                  has_native_deepdoc=true
-                  ;;
-                *.go|go.mod|go.sum)                       has_go=true ;;
-                web/*)                                    has_web=true ;;
-              esac
-            done <<< "$CHANGED_FILES"
-
-            if [[ "$has_go" == "false" && "$has_web" == "false" ]]; then
-              has_go=true
-              has_web=true
-              has_native_deepdoc=true
-            fi
           fi
 
           echo "has_go_changes=${has_go}"        >> $GITHUB_OUTPUT
